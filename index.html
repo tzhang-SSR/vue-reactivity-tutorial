@@ -10,34 +10,43 @@
     <h1>手写Vue响应式</h1>
 </body>
 <script>
+    let activeEffect // 当前正在执行的副作用函数
+    const bucket = new Set();
     const data = { text: "Hello World!" };
     // 通过Proxy代理对数据的读取操作进行拦截
     const obj = new Proxy(data, {
         get(target, key) {
+            // 将副作用函数添加到桶中
+            bucket.add(activeEffect);
             return target[key];
         },
         set(target, key, newVal) {
             target[key] = newVal;
-            // 检测到写入操作，这个时候需要执行对应的副作用函数
-            effect();
-            // 返回 true 代表设置操作成功
+            // 检测到写入操作，从桶中取出副作用函数并依次执行
+            bucket.forEach((fn) => fn());
             return true;
         },
     });
 
-
-    function effect() {
-        // 触发obj.text的getter函数，执行读取操作
-        console.log("effect triggered");
-        document.body.innerText = obj.text;
+    function effect(fn) {
+        activeEffect = fn;
+        fn();
     }
 
-    effect();
+    effect(() => {
+        console.log("effect triggered");
+        document.body.innerText = obj.text;
+    });
+
+    effect(() => {
+        console.log("effect triggered 2");
+        console.log('obj.text: ', obj.text);
+    });
+
     setTimeout(() => {
         // 触发obj.text的setter函数，写入操作
         obj.text = "Hello Vue!";
     }, 1000);
-
 </script>
 
 </html>
