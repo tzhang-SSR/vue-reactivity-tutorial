@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>手写Vue响应式-二魔</title>
+</head>
+
+<body>
+    <h1>手写Vue响应式</h1>
+</body>
+<script>
+    const data = { text: "Hello World!" };
+    // 通过Proxy代理对数据的读取操作进行拦截
+    const obj = new Proxy(data, {
+        get(target, key) {
+            return target[key];
+        },
+        set(target, key, newVal) {
+            target[key] = newVal;
+            // 检测到写入操作，这个时候需要执行对应的副作用函数
+            effect();
+            // 返回 true 代表设置操作成功
+            return true;
+        },
+    });
+
+
+    function effect() {
+        // 触发obj.text的getter函数，执行读取操作
+        console.log("effect triggered");
+        document.body.innerText = obj.text;
+    }
+
+    effect();
+    setTimeout(() => {
+        // 触发obj.text的setter函数，写入操作
+        obj.text = "Hello Vue!";
+    }, 1000);
+
+</script>
+
+</html>
