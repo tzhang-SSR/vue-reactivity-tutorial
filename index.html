@@ -11,23 +11,48 @@
 </body>
 <script>
     let activeEffect // 当前正在执行的副作用函数
-    const bucket = new Set();
     const data = { text: "Hello World!" };
+    const bucket = new WeakMap()
+
+    function track(target, key) {
+        // 没有 activeEffect，直接 return
+        if (!activeEffect) return
+        let depsMap = bucket.get(target)
+        // 如果不存在，那么就新建一个与 target 关联的depsMap
+        if (!depsMap) {
+            bucket.set(target, (depsMap = new Map()))
+        }
+
+        // 如果不存在，同样新建一个与 key 关联的deps
+        let deps = depsMap.get(key)
+        if (!deps) {
+            depsMap.set(key, (deps = new Set()))
+        }
+        // 最后将当前激活的副作用函数添加到“桶”里
+        deps.add(activeEffect)
+    }
+
+    function trigger(target, key) {
+        // 根据target从桶中取得 depsMap，再根据key取得所有副作用函数 effects，然后依次执行
+        const depsMap = bucket.get(target)
+        if (!depsMap) return
+        const effects = depsMap.get(key)
+        effects && effects.forEach(fn => fn())
+    }
+
     // 通过Proxy代理对数据的读取操作进行拦截
     const obj = new Proxy(data, {
         get(target, key) {
-            // 将副作用函数添加到桶中
-            bucket.add(activeEffect);
-            return target[key];
+            track(target, key)
+            return target[key]
         },
         set(target, key, newVal) {
-            target[key] = newVal;
-            // 检测到写入操作，从桶中取出副作用函数并依次执行
-            bucket.forEach((fn) => fn());
-            return true;
-        },
-    });
+            target[key] = newVal
+            trigger(target, key)
+        }
+    })
 
+    // 修改effect函数的功能，使其能够接收一个函数作为参数，并将该函数作为副作用函数执行
     function effect(fn) {
         activeEffect = fn;
         fn();
@@ -45,7 +70,7 @@
 
     setTimeout(() => {
         // 触发obj.text的setter函数，写入操作
-        obj.text = "Hello Vue!";
+        obj.nonExist = "Hello Vue!";
     }, 1000);
 </script>
 
