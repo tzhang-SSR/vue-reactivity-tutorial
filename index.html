@@ -12,7 +12,7 @@
 <script>
     let activeEffect // 当前正在执行的副作用函数
     const effectStack = [] // 副作用函数栈
-    const data = { foo: true, bar: true };
+    const data = { foo: 1 };
     const bucket = new WeakMap()
 
     function track(target, key) {
@@ -30,6 +30,7 @@
             depsMap.set(key, (deps = new Set()))
         }
         // 最后将当前激活的副作用函数添加到deps中
+        console.log('将当前激活的副作用函数activeEffect添加到deps中')
         deps.add(activeEffect)
         // 副作用函数的依赖集合deps也反过来存储响应式变量的依赖集合deps
         activeEffect.deps.push(deps)
@@ -40,9 +41,14 @@
         const depsMap = bucket.get(target)
         if (!depsMap) return
         const effects = depsMap.get(key)
-
-        // 创建一个新的 Set 集合，用于存储需要执行的副作用函数
-        const effectsToRun = new Set(effects)
+        console.log('将副作用函数取出执行')
+        const effectsToRun = new Set()
+        effects && effects.forEach(effectFn => {
+            // 如果 trigger 触发执行的副作用函数与当前正在执行的副作用函数相同，则不加入执行队列中
+            if (effectFn !== activeEffect) {  // 新增
+                effectsToRun.add(effectFn)
+            }
+        })
         effectsToRun.forEach(fn => fn())
     }
 
@@ -86,19 +92,9 @@
         effectFn()
     }
 
-    let tmp1, tmp2
-    effect(function effectFn1() {
-        console.log('执行effectFn1')
-
-        effect(function effectFn2() {
-            console.log('执行effectFn2')
-            // 在 effectFn2 中读取obj.bar
-            temp2 = obj.bar
-        })
-        // 在 effectFn1 中读取obj.foo
-        temp1 = obj.foo
+    effect(() => {
+        obj.foo++
     })
-    obj.foo = false
 
 </script>
 
