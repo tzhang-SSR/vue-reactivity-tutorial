@@ -30,7 +30,6 @@
             depsMap.set(key, (deps = new Set()))
         }
         // 最后将当前激活的副作用函数添加到deps中
-        console.log('将当前激活的副作用函数activeEffect添加到deps中')
         deps.add(activeEffect)
         // 副作用函数的依赖集合deps也反过来存储响应式变量的依赖集合deps
         activeEffect.deps.push(deps)
@@ -41,7 +40,6 @@
         const depsMap = bucket.get(target)
         if (!depsMap) return
         const effects = depsMap.get(key)
-        console.log('将副作用函数取出执行')
         const effectsToRun = new Set()
         effects && effects.forEach(effectFn => {
             // 如果 trigger 触发执行的副作用函数与当前正在执行的副作用函数相同，则不加入执行队列中
@@ -49,7 +47,13 @@
                 effectsToRun.add(effectFn)
             }
         })
-        effectsToRun.forEach(fn => fn())
+        effectsToRun.forEach(fn => {
+            if (fn.options.scheduler) {
+                fn.options.scheduler(fn)
+            } else {
+                fn()
+            }
+        })
     }
 
     // 通过Proxy代理对数据的读取操作进行拦截
@@ -75,7 +79,7 @@
     }
 
     // 修改effect函数的功能，使其能够接收一个函数作为参数，并将该函数作为副作用函数执行
-    function effect(fn) {
+    function effect(fn, options = {}) {
         const effectFn = () => {
             cleanup(effectFn)
             activeEffect = effectFn
@@ -88,13 +92,48 @@
         }
         // effectFn.deps 用来存储所有与该副作用函数相关联的依赖集合
         effectFn.deps = []
+        // effectFn.options 用来存储用户自定义的调度器选项
+        effectFn.options = options
         // 执行副作用函数
         effectFn()
     }
 
+    // 定义一个任务队列
+    const taskQueue = new Set()
+
+    // 定义一个标志，用来判断当前是否正在执行任务队列
+    let isFlushing = false
+    function flushTask() {
+        // 如果任务队列正在执行，则直接返回
+        if (isFlushing) return
+        // 设置标志为 true，代表正在执行任务队列
+        isFlushing = true
+        // 创建一个新的 Promise 实例，通过then方法将任务队列的执行权交给微任务队列
+        const p = Promise.resolve()
+        p.then(() => {
+            taskQueue.forEach(task => {
+                console.log('执行任务队列')
+                task()
+            })
+        }).finally(() => {
+            isFlushing = false
+        })
+    }
+
     effect(() => {
-        obj.foo++
+        console.log('obj.foo: ', obj.foo)
+    }, {
+        scheduler: (fn) => {
+            taskQueue.add(fn)
+            flushTask()
+        }
     })
+    obj.foo++
+    console.log('obj.foo自增')
+    obj.foo++
+    console.log('obj.foo自增')
+    obj.foo++
+    console.log('obj.foo自增')
 
 </script>
 
