@@ -12,7 +12,7 @@
 <script>
     let activeEffect // 当前正在执行的副作用函数
     const effectStack = [] // 副作用函数栈
-    const data = { foo: 1 };
+    const data = { foo: 1, bar: 1 };
     const bucket = new WeakMap()
 
     function track(target, key) {
@@ -83,19 +83,22 @@
         const effectFn = () => {
             cleanup(effectFn)
             activeEffect = effectFn
-            // 在调用副作用函数之前将当前副作用函数压入栈中
             effectStack.push(effectFn)
-            fn()
-            // 当前副作用函数执行完毕后，将activeEffect还原为之前的值
+            const res = fn()
             effectStack.pop()
             activeEffect = effectStack[effectStack.length - 1]
+            // 执行到最后需要返回结果
+            return res
         }
         // effectFn.deps 用来存储所有与该副作用函数相关联的依赖集合
         effectFn.deps = []
         // effectFn.options 用来存储用户自定义的调度器选项
         effectFn.options = options
-        // 执行副作用函数
-        effectFn()
+        if (!options.lazy) {
+            effectFn()
+        }
+        // 最后将副作用函数作为返回值返回
+        return effectFn
     }
 
     // 定义一个任务队列
@@ -120,20 +123,56 @@
         })
     }
 
-    effect(() => {
-        console.log('obj.foo: ', obj.foo)
-    }, {
-        scheduler: (fn) => {
-            taskQueue.add(fn)
-            flushTask()
+
+    function computed(getter) {
+        let value
+        let dirty = true // dirty为 true 则意味着“脏”，需要计算
+
+        const effectFn = effect(getter, {
+            lazy: true, // lazy为 true 则意味着“惰性”
+            scheduler() {
+                // 当计算属性依赖的响应式数据变化时，
+                // 1. 重置dirty为true，以便重新计算
+                // 2. 手动调用 trigger 函数触发响应
+                dirty = true
+                trigger(obj, 'value')
+            }
+        })
+
+        const obj = {
+            get value() {
+                if (dirty) {
+                    value = effectFn()
+                    // 计算后将 dirty 设置为 false，下一次访问就可以直接使用缓存到 value 中的值
+                    dirty = false
+                }
+                // 当读取 value 时，手动调用 track 函数进行追踪
+                track(obj, 'value')
+                return value
+            }
         }
+
+        return obj
+    }
+    // effect(() => {
+    //     console.log('obj.foo: ', obj.foo)
+    // }, {
+    //     scheduler: (fn) => {
+    //         taskQueue.add(fn)
+    //         flushTask()
+    //     }
+    // })
+    // obj.foo++
+    // obj.foo++
+    // obj.foo++
+
+    const sum = computed(() => { console.log("执行计算操作"); return obj.foo + obj.bar })
+    console.log('sum:', sum.value)
+    effect(() => {
+        console.log('在另一个副作用函数中, sum:', sum.value)
     })
     obj.foo++
-    console.log('obj.foo自增')
-    obj.foo++
-    console.log('obj.foo自增')
-    obj.foo++
-    console.log('obj.foo自增')
+
 
 </script>
 
