@@ -176,12 +176,17 @@
             getter = () => traverse(source)
         }
 
-        let value, oldValue
+        let value, oldValue, cleanup
+        function onCleanup(fn) {
+            cleanup = fn
+        }
         const job = () => {
             value = effectFn()
-            cb(value, oldValue)
+            if (cleanup) cleanup()
+            cb(value, oldValue, onCleanup)
             oldValue = value
         }
+
         const effectFn = effect(
             () => getter(),
             {
@@ -204,14 +209,31 @@
         }
     }
 
-    watch(() => obj.foo, (value, oldValue) => {
-        console.log('观测到obj.foo变化', { value, oldValue })
+    let count = 0
+    let finalRes
+
+    watch(() => obj.foo, async (value, oldValue, onCleanup) => {
+        let expired = false
+        onCleanup(() => {
+            expired = true
+        })
+
+        let res, finalRes
+        count++
+        if (count === 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            res = 1
+        } else {
+            res = 2
+        }
+        if (!expired) {
+            finalRes = res
+            console.log({ finalRes })
+        }
     })
 
     obj.foo++
     obj.foo++
-    document.body.innerHTML = 'DOM更新了'
-    console.log("DOM更新了")
 
 
 </script>
