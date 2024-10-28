@@ -167,7 +167,7 @@
         return obj
     }
 
-    function watch(source, cb) {
+    function watch(source, cb, options = {}) {
         let getter
         if (typeof source === 'function') {
             getter = source
@@ -177,21 +177,31 @@
         }
 
         let value, oldValue
+        const job = () => {
+            value = effectFn()
+            cb(value, oldValue)
+            oldValue = value
+        }
         const effectFn = effect(
             () => getter(),
             {
                 // 加上lazy选项，从而手动调用副作用函数
                 lazy: true,
-                scheduler() {
-                    value = effectFn()
-                    cb(value, oldValue)
-                    // 更新旧值
-                    oldValue = value
+                scheduler: () => {
+                    if (options.flush === 'post') {
+                        const p = Promise.resolve()
+                        p.then(job)
+                    } else {
+                        job()
+                    }
                 }
             }
         )
-        // 获取数据的初始值
-        oldValue = effectFn()
+        if (options.immediate) {
+            job()
+        } else {
+            oldValue = effectFn()
+        }
     }
 
     watch(() => obj.foo, (value, oldValue) => {
@@ -200,6 +210,8 @@
 
     obj.foo++
     obj.foo++
+    document.body.innerHTML = 'DOM更新了'
+    console.log("DOM更新了")
 
 
 </script>
