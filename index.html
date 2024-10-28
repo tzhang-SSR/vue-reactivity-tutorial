@@ -154,23 +154,51 @@
 
         return obj
     }
-    // effect(() => {
-    //     console.log('obj.foo: ', obj.foo)
-    // }, {
-    //     scheduler: (fn) => {
-    //         taskQueue.add(fn)
-    //         flushTask()
-    //     }
-    // })
-    // obj.foo++
-    // obj.foo++
-    // obj.foo++
 
-    const sum = computed(() => { console.log("执行计算操作"); return obj.foo + obj.bar })
-    console.log('sum:', sum.value)
-    effect(() => {
-        console.log('在另一个副作用函数中, sum:', sum.value)
+    function traverse(obj, seen = new Set()) {
+        if (typeof obj !== 'object' || obj === null || seen.has(obj)) return
+        // 将数据添加到 seen 中，代表已读取过了，避免循环引用引起死循环
+        seen.add(obj)
+        // 暂时不考虑数组等其他结构
+        for (const k in obj) {
+            traverse(obj[k], seen)
+        }
+
+        return obj
+    }
+
+    function watch(source, cb) {
+        let getter
+        if (typeof source === 'function') {
+            getter = source
+        } else {
+            // 否则按照原来的实现调用 traverse 递归地读取
+            getter = () => traverse(source)
+        }
+
+        let value, oldValue
+        const effectFn = effect(
+            () => getter(),
+            {
+                // 加上lazy选项，从而手动调用副作用函数
+                lazy: true,
+                scheduler() {
+                    value = effectFn()
+                    cb(value, oldValue)
+                    // 更新旧值
+                    oldValue = value
+                }
+            }
+        )
+        // 获取数据的初始值
+        oldValue = effectFn()
+    }
+
+    watch(() => obj.foo, (value, oldValue) => {
+        console.log('观测到obj.foo变化', { value, oldValue })
     })
+
+    obj.foo++
     obj.foo++
 
 
